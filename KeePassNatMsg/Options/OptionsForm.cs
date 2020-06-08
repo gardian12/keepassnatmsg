@@ -1,14 +1,14 @@
-﻿using KeePassNatMsg.NativeMessaging;
-using KeePassNatMsg.Utils;
-using KeePassLib;
+﻿using KeePassLib;
 using KeePassLib.Collections;
+using KeePassNatMsg.NativeMessaging;
+using KeePassNatMsg.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace KeePassNatMsg
+namespace KeePassNatMsg.Options
 {
     public partial class OptionsForm : Form
     {
@@ -45,8 +45,19 @@ namespace KeePassNatMsg
             returnStringFieldsWithKphOnlyCheckBox.Checked = _config.ReturnStringFieldsWithKphOnly;
             SortByUsernameRadioButton.Checked = _config.SortResultByUsername;
             SortByTitleRadioButton.Checked = !_config.SortResultByUsername;
+            txtKPXCVerOverride.Text = _config.OverrideKeePassXcVersion;
+            chkSearchUrls.Checked = _config.SearchUrls;
 
             this.returnStringFieldsCheckbox_CheckedChanged(null, EventArgs.Empty);
+
+            InitDatabasesDropdown();
+            foreach (DatabaseItem item in comboBoxDatabases.Items)
+            {
+                if (item.DbHash == _config.ConnectionDatabaseHash)
+                {
+                    comboBoxDatabases.SelectedItem = item;
+                }
+            }
         }
 
         private void okButton_Click(object sender, EventArgs e)
@@ -62,6 +73,10 @@ namespace KeePassNatMsg
             _config.ReturnStringFields = returnStringFieldsCheckbox.Checked;
             _config.ReturnStringFieldsWithKphOnly = returnStringFieldsWithKphOnlyCheckBox.Checked;
             _config.SortResultByUsername = SortByUsernameRadioButton.Checked;
+            _config.OverrideKeePassXcVersion = txtKPXCVerOverride.Text;
+            _config.ConnectionDatabaseHash = (comboBoxDatabases.SelectedItem as DatabaseItem)?.DbHash;
+            _config.SearchUrls = chkSearchUrls.Checked;
+            
             if (_restartRequired)
             {
                 MessageBox.Show(
@@ -71,6 +86,15 @@ namespace KeePassNatMsg
                     MessageBoxIcon.Information
                 );
             }
+
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        private void cancelButton_Click(object sender, EventArgs e)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
         }
 
         private void removeButton_Click(object sender, EventArgs e)
@@ -214,7 +238,7 @@ namespace KeePassNatMsg
                     _host.Install(bsf.SelectedBrowsers);
                     _host.UpdateProxy();
                     GetNativeMessagingStatus();
-                    MessageBox.Show(this, "The native messaging host installed completed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Invoke(new Action(() => MessageBox.Show(this, "The native messaging host installed completed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)));
                 });
                 t.Start();
             }
@@ -228,17 +252,7 @@ namespace KeePassNatMsg
             {
                 if (ti.IsCompleted && !ti.Result)
                 {
-                    var nmiInstall = MessageBox.Show(this, $"The native messaging host was not detected. It must be installed for KeePassNatMsg to work. Do you want to install it now?", "Native Messaging Host Not Detected", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
-                    if (nmiInstall == DialogResult.Yes)
-                    {
-                        var bsf = new BrowserSelectForm(_host);
-                        if (bsf.ShowDialog(this) == DialogResult.OK)
-                        {
-                            _host.Install(bsf.SelectedBrowsers);
-                            _host.UpdateProxy();
-                            MessageBox.Show(this, "The native messaging host installed completed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        }
-                    }
+                    Invoke(new Action(() => PromptInstall()));
                 }
                 GetNativeMessagingStatus();
             });
@@ -246,6 +260,21 @@ namespace KeePassNatMsg
             lblProxyVersion.Text = "Loading Native Messaging Status...";
 
             t.Start();
+        }
+
+        private void PromptInstall()
+        {
+            var nmiInstall = MessageBox.Show(this, $"The native messaging host was not detected. It must be installed for KeePassNatMsg to work. Do you want to install it now?", "Native Messaging Host Not Detected", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (nmiInstall == DialogResult.Yes)
+            {
+                var bsf = new BrowserSelectForm(_host);
+                if (bsf.ShowDialog(this) == DialogResult.OK)
+                {
+                    _host.Install(bsf.SelectedBrowsers);
+                    _host.UpdateProxy();
+                    MessageBox.Show(this, "The native messaging host installed completed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
         }
 
         private void OptionsForm_Shown(object sender, EventArgs e)
@@ -285,6 +314,23 @@ namespace KeePassNatMsg
             lst.Add($"Proxy: {proxyDisplay}{latestVersionDisplay}");
 
             lblProxyVersion.Text = string.Join(Environment.NewLine, lst);
+        }
+
+        private void InitDatabasesDropdown()
+        {
+            foreach (var item in KeePass.Program.MainForm.DocumentManager.Documents)
+            {
+                if (!item.Database.IsOpen)
+                    continue;
+
+                var dbIdentifier = item.Database.Name;
+                if (string.IsNullOrEmpty(dbIdentifier))
+                {
+                    dbIdentifier = item.Database.IOConnectionInfo.Path;
+                }
+
+                comboBoxDatabases.Items.Add(new DatabaseItem { Id = dbIdentifier, DbHash = KeePassNatMsgExt.ExtInstance.GetDbHash(item.Database) });
+            }
         }
     }
 }

@@ -26,6 +26,7 @@ This plugin is primarily intended for use with the [keepassxc-browser](https://g
 ## Installation
 
  1. Download the latest [KeePassNatMsg](https://github.com/smorks/keepassnatmsg/releases) release
+ 	* Arch Linux (AUR): https://aur.archlinux.org/packages/keepass-natmsg/
  2. Unzip it into the KeePass\Plugins directory
 	* default directory in Ubuntu14.04: /usr/lib/keepass2/
 	* default directory in Arch: /usr/share/keepass
@@ -35,6 +36,7 @@ This plugin is primarily intended for use with the [keepassxc-browser](https://g
  4. Restart KeePass
  5. Go to Tools -> KeePassNatMsg Options
  6. Click on "Install/Update Native Messaging Host", wait for message telling you it was intalled.
+ 7. Install the [KeePassXC-Browser](https://github.com/keepassxreboot/keepassxc-browser) extension for your browser, and Connect to the database from within the extension.
 
 ### KeePassNatMsg on Linux and Mac
 

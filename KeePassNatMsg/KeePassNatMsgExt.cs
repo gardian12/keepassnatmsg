@@ -2,16 +2,17 @@
 using KeePass.Plugins;
 using KeePass.UI;
 using KeePass.Util.Spr;
-using KeePassNatMsg.Entry;
-using KeePassNatMsg.Protocol;
-using KeePassNatMsg.Protocol.Action;
-using KeePassNatMsg.Protocol.Crypto;
-using KeePassNatMsg.Protocol.Listener;
 using KeePassLib;
 using KeePassLib.Cryptography;
 using KeePassLib.Cryptography.PasswordGenerator;
 using KeePassLib.Security;
 using KeePassLib.Utility;
+using KeePassNatMsg.Entry;
+using KeePassNatMsg.Options;
+using KeePassNatMsg.Protocol;
+using KeePassNatMsg.Protocol.Action;
+using KeePassNatMsg.Protocol.Crypto;
+using KeePassNatMsg.Protocol.Listener;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -22,7 +23,7 @@ using System.Windows.Forms;
 
 namespace KeePassNatMsg
 {
-    public sealed class KeePassNatMsgExt : Plugin
+    public sealed class KeePassNatMsgExt : Plugin, IDisposable
     {
 
         /// <summary>
@@ -31,6 +32,14 @@ namespace KeePassNatMsg
         public static readonly byte[] KeePassNatMsgUuid = {
                 0x34, 0x69, 0x7a, 0x40, 0x8a, 0x5b, 0x41, 0xc0,
                 0x9f, 0x36, 0x89, 0x7d, 0x62, 0x3e, 0xcb, 0x31
+        };
+        
+        /// <summary>
+        /// an arbitrarily generated uuid for the keepassnatmsg new password group
+        /// </summary>
+        public static readonly byte[] KeePassNatMsgGroupUuid = {
+                0xa4, 0x36, 0xb6, 0x24, 0xee, 0x2c, 0x44, 0x21,
+                0xb3, 0xe0, 0x94, 0x99, 0x24, 0xe9, 0xc1, 0x8c
         };
 
         internal static IPluginHost HostInstance;
@@ -43,7 +52,7 @@ namespace KeePassNatMsg
         public const string AssociateKeyPrefix = "Public Key: ";
         private const string PipeName = "kpxc_server";
 
-        private static readonly Version KeePassXcVersion = new Version(2, 4, 0);
+        private static readonly Version KeePassXcVersion = new Version(2, 4, 3);
 
         private IListener _listener;
 
@@ -53,7 +62,7 @@ namespace KeePassNatMsg
 
         internal PwEntry GetConfigEntry(bool create)
         {
-            var root = HostInstance.Database.RootGroup;
+            var root = GetConnectionDatabase().RootGroup;
             var uuid = new PwUuid(KeePassNatMsgUuid);
             var entry = root.FindEntry(uuid, false);
             if (entry == null && create)
@@ -65,6 +74,21 @@ namespace KeePassNatMsg
                 UpdateUI(null);
             }
             return entry;
+        }
+
+        internal PwGroup GetPasswordsGroup()
+        {
+            var root = GetConnectionDatabase().RootGroup;
+            var uuid = new PwUuid(KeePassNatMsgGroupUuid);
+            var group = root.FindGroup(uuid, true);
+            if (group == null)
+            {
+                group = new PwGroup(false, true, KeePassNatMsgGroupName, PwIcon.WorldComputer);
+                group.Uuid = uuid;
+                root.AddGroup(group, true);
+                UpdateUI(null);
+            }
+            return group;
         }
 
         private int GetNotificationTime()
@@ -212,7 +236,7 @@ namespace KeePassNatMsg
         internal void UpdateUI(PwGroup group)
         {
             var win = HostInstance.MainWindow;
-            if (group == null) group = HostInstance.Database.RootGroup;
+            if (group == null) group = GetConnectionDatabase().RootGroup;
             var f = (MethodInvoker) delegate {
                 win.UpdateUI(false, null, true, group, true, null, true);
             };
@@ -256,14 +280,19 @@ namespace KeePassNatMsg
             return new string[] { user, pass };
         }
 
-        internal string GetDbHash()
+        internal string GetDbHash(PwDatabase db)
         {
             var ms = new MemoryStream();
-            ms.Write(HostInstance.Database.RootGroup.Uuid.UuidBytes, 0, 16);
-            ms.Write(HostInstance.Database.RecycleBinUuid.UuidBytes, 0, 16);
+            ms.Write(db.RootGroup.Uuid.UuidBytes, 0, 16);
+            ms.Write(db.RecycleBinUuid.UuidBytes, 0, 16);
             var sha256 = new SHA256CryptoServiceProvider();
             var hashBytes = sha256.ComputeHash(ms.ToArray());
             return ByteToHexBitFiddle(hashBytes);
+        }
+
+        internal string GetDbHash()
+        {
+            return GetDbHash(GetConnectionDatabase());
         }
 
         // wizard magic courtesy of https://stackoverflow.com/questions/311165/how-do-you-convert-a-byte-array-to-a-hexadecimal-string-and-vice-versa/14333437#14333437
@@ -380,6 +409,45 @@ namespace KeePassNatMsg
             return null;
         }
 
-        public static string GetVersion() => KeePassXcVersion.ToString();
+        public static string GetVersion()
+        {
+            var c = new ConfigOpt(HostInstance.CustomConfig);
+            var verOvr = c.OverrideKeePassXcVersion;
+            return string.IsNullOrWhiteSpace(verOvr) ? KeePassXcVersion.ToString() : verOvr;
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // dispose managed resources
+                IDisposable disposable = (IDisposable)_listener;
+                disposable?.Dispose();
+            }
+            // free native resources
+        }
+
+        private PwDatabase GetConnectionDatabase()
+        {
+            var options = new ConfigOpt(HostInstance.CustomConfig);
+            if (string.IsNullOrEmpty(options.ConnectionDatabaseHash))
+            {
+                return HostInstance.Database;
+            }
+            else
+            {
+                var document = HostInstance.MainWindow.DocumentManager.Documents.Find(p => GetDbHash(p.Database) == options.ConnectionDatabaseHash);
+                if (document != null)
+                    return document.Database;
+                else
+                    return HostInstance.Database;
+            }
+        }
     }
 }

@@ -16,8 +16,11 @@ namespace KeePassNatMsg
         const string ReturnStringFieldsKey = "KeePassHttp_ReturnStringFields";
         const string ReturnStringFieldsWithKphOnlyKey = "KeePassHttp_ReturnStringFieldsWithKphOnly";
         const string SortResultByUsernameKey = "KeePassHttp_SortResultByUsername";
+        const string OverrideKeePassXcVersionKey = "KeePassNatMsg_OverrideKeePassXcVersion";
+		const string ConnectionDatabaseHashKey = "KeePassHttp_ConnectionDatabaseHash";
+        const string SearchUrlsKey = "KeePassHttp_SearchUrls";
 
-        public ConfigOpt(AceCustomConfig config)
+		public ConfigOpt(AceCustomConfig config)
         {
             _config = config;
         }
@@ -86,5 +89,23 @@ namespace KeePassNatMsg
             get { return _config.GetBool(SortResultByUsernameKey, true); }
             set { _config.SetBool(SortResultByUsernameKey, value); }
         }
-    }
+
+        public string OverrideKeePassXcVersion
+        {
+            get => _config.GetString(OverrideKeePassXcVersionKey);
+            set => _config.SetString(OverrideKeePassXcVersionKey, value);
+        }
+
+		public string ConnectionDatabaseHash
+		{
+			get { return _config.GetString(ConnectionDatabaseHashKey, string.Empty); }
+			set { _config.SetString(ConnectionDatabaseHashKey, value); }
+		}
+
+        public bool SearchUrls
+        {
+            get => _config.GetBool(SearchUrlsKey, false);
+            set => _config.SetBool(SearchUrlsKey, value);
+        }
+	}
 }
