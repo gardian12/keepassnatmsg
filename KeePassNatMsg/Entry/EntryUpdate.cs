@@ -105,10 +105,8 @@ namespace KeePassNatMsg.Entry
             return false;
         }
 
-        public bool CreateEntry(string username, string password, string url, string submithost, string realm)
+        public bool CreateEntry(string username, string password, string url, string submithost, string realm, string groupUuid)
         {
-            var group =_ext.GetPasswordsGroup();
-
             string baseUrl = url;
             // index bigger than https:// <-- this slash
             if (baseUrl.LastIndexOf("/") > 9)
@@ -137,6 +135,21 @@ namespace KeePassNatMsg.Entry
                 serializer.Serialize(writer, config);
                 entry.Strings.Set(KeePassNatMsgExt.KeePassNatMsgName, new ProtectedString(false, writer.ToString()));
             }
+
+            PwGroup group = null;
+
+            if (!string.IsNullOrEmpty(groupUuid))
+            {
+                var db = _ext.GetConnectionDatabase();
+                if (db.RootGroup != null)
+                {
+                    var uuid = new PwUuid(MemUtil.HexStringToByteArray(groupUuid));
+                    group = db.RootGroup.FindGroup(uuid, true);
+                }
+            }
+
+            if (group == null)
+                group = _ext.GetPasswordsGroup();
 
             group.AddEntry(entry, true);
             _ext.UpdateUI(group);

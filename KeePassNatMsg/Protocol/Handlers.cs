@@ -1,4 +1,5 @@
 ﻿using KeePass.Plugins;
+using KeePassLib;
 using KeePassNatMsg.Entry;
 using KeePassNatMsg.Protocol.Action;
 using Newtonsoft.Json.Linq;
@@ -35,7 +36,9 @@ namespace KeePassNatMsg.Protocol
                 {Actions.GET_LOGINS, GetLogins},
                 {Actions.SET_LOGIN, SetLogin},
                 {Actions.GENERATE_PASSWORD, GeneratePassword},
-                {Actions.LOCK_DATABASE, LockDatabase}
+                {Actions.LOCK_DATABASE, LockDatabase},
+                {Actions.GET_DATABASE_GROUPS, GetDatabaseGroups},
+                {Actions.CREATE_NEW_GROUP, CreateNewGroup},
             };
         }
 
@@ -44,28 +47,28 @@ namespace KeePassNatMsg.Protocol
             var handler = GetHandler(req.Action);
             if (handler != null)
             {
-                if (handler != ChangePublicKeys)
+                if (handler != ChangePublicKeys && !UnlockDatabase(req.TriggerUnlock))
                 {
-                    lock (_unlockLock)
-                    {
-                        var config = new ConfigOpt(_host.CustomConfig);
-                        if (!_host.Database.IsOpen && config.UnlockDatabaseRequest)
-                        {
-                            if (KeePass.UI.GlobalWindowManager.WindowCount == 0)
-                            {
-                                _host.MainWindow.Invoke(new System.Action(() => _host.MainWindow.OpenDatabase(_host.MainWindow.DocumentManager.ActiveDocument.LockedIoc, null, false)));
-                            }
-                        }
-                        if (!_host.Database.IsOpen)
-                        {
-                            return new ErrorResponse(req, ErrorType.DatabaseNotOpened);
-                        }
-                    }
+                    return new ErrorResponse(req, ErrorType.DatabaseNotOpened);
                 }
 
                 return handler.Invoke(req);
             }
             return new ErrorResponse(req, ErrorType.IncorrectAction);
+        }
+
+        private bool UnlockDatabase(bool triggerUnlock)
+        {
+            lock (_unlockLock)
+            {
+                var config = new ConfigOpt(_host.CustomConfig);
+                if (!_host.Database.IsOpen && config.UnlockDatabaseRequest && KeePass.UI.GlobalWindowManager.WindowCount == 0 && triggerUnlock)
+                {
+                    _host.MainWindow.Invoke(new System.Action(() => _host.MainWindow.OpenDatabase(_host.MainWindow.DocumentManager.ActiveDocument.LockedIoc, null, false)));
+                }
+
+                return _host.Database.IsOpen;
+            }
         }
 
         private RequestHandler GetHandler(string action) => _handlers.ContainsKey(action) ? _handlers[action] : null;
@@ -164,17 +167,26 @@ namespace KeePassNatMsg.Protocol
                 var login = reqMsg.GetString("login");
                 var pw = reqMsg.GetString("password");
                 var submitUrl = reqMsg.GetString("submitUrl");
+                var groupUuid = reqMsg.GetString("groupUuid");
+
+                bool result;
 
                 if (string.IsNullOrEmpty(uuid))
                 {
-                    eu.CreateEntry(login, pw, url, submitUrl, null);
+                    result = eu.CreateEntry(login, pw, url, submitUrl, null, groupUuid);
                 }
                 else
                 {
-                    eu.UpdateEntry(uuid, login, pw, url);
+                    result = eu.UpdateEntry(uuid, login, pw, url);
                 }
 
-                return req.GetResponse();
+                var resp = req.GetResponse();
+
+                resp.Message.Add("count", JValue.CreateNull());
+                resp.Message.Add("entries", JValue.CreateNull());
+                resp.Message.Add("error", result ? "success" : "error");
+
+                return resp;
             }
             return new ErrorResponse(req, ErrorType.CannotDecryptMessage);
         }
@@ -192,6 +204,71 @@ namespace KeePassNatMsg.Protocol
 
             _host.MainWindow.Invoke(new System.Action(() => _host.MainWindow.LockAllDocuments()));
             return req.GetResponse();
+        }
+
+        private Response GetDatabaseGroups(Request req)
+        {
+            var db = _ext.GetConnectionDatabase();
+
+            if (db.RootGroup == null)
+            {
+                return new ErrorResponse(req, ErrorType.NoGroupsFound);
+            }
+
+            var root = new JObject
+            {
+                { "name", db.RootGroup.Name },
+                { "uuid", db.RootGroup.Uuid.ToHexString() },
+                { "children", GetGroupChildren(db.RootGroup) }
+            };
+
+            var resp = req.GetResponse();
+
+            resp.Message.Add("groups", new JObject
+            {
+                { "groups", new JArray { root } }
+            });
+
+            return resp;
+        }
+
+        private JArray GetGroupChildren(PwGroup group)
+        {
+            var groups = new JArray();
+
+            foreach(var grp in group.GetGroups(false))
+            {
+                groups.Add(new JObject
+                {
+                    { "name", grp.Name },
+                    { "uuid", grp.Uuid.ToHexString() },
+                    { "children", GetGroupChildren(grp) }
+                });
+            }
+
+            return groups;
+        }
+
+        private Response CreateNewGroup(Request req)
+        {
+            if (!req.TryDecrypt())
+                return new ErrorResponse(req, ErrorType.CannotDecryptMessage);
+
+            var groupName = req.Message.GetString("groupName");
+
+            var db = _ext.GetConnectionDatabase();
+
+            var group = db.RootGroup.FindCreateSubTree(groupName, new[] { '/' }, true);
+
+            if (group == null)
+                return new ErrorResponse(req, ErrorType.CannotCreateNewGroup);
+
+            var resp = req.GetResponse();
+
+            resp.Message.Add("name", group.Name);
+            resp.Message.Add("uuid", group.Uuid.ToHexString());
+
+            return resp;
         }
     }
 }
