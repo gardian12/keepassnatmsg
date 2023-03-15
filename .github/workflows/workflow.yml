@@ -1,0 +1,23 @@
+name: Main workflow
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+    runs-on: 'windows-2019'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - id: dlkp
+        name: Download Keepass
+        uses: smorks/keepass-download-action@v0.0.5
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1
+      - name: Extract KeePass and Build
+        run: |
+          mkdir build
+          7z x -o"build" ${{ steps.dlkp.outputs.filename }} KeePass.exe
+          msbuild

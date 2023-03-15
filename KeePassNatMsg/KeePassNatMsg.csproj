@@ -15,6 +15,7 @@
     <TargetFrameworkProfile />
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <LangVersion>5</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -37,7 +38,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="KeePass">
-      <HintPath>..\..\..\..\data\cloud.brandt.tech\apps\keepass\KeePass.exe</HintPath>
+      <HintPath>..\build\KeePass.exe</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
@@ -66,6 +67,7 @@
     <Compile Include="Entry\EntryConfig.cs" />
     <Compile Include="ConfigOpt.cs" />
     <Compile Include="Options\DatabaseItem.cs" />
+    <Compile Include="Options\DatabaseKeyItem.cs" />
     <Compile Include="Options\OptionsForm.cs">
       <SubType>Form</SubType>
     </Compile>

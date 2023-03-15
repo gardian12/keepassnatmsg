@@ -19,6 +19,7 @@ namespace KeePassNatMsg
         const string OverrideKeePassXcVersionKey = "KeePassNatMsg_OverrideKeePassXcVersion";
 		const string ConnectionDatabaseHashKey = "KeePassHttp_ConnectionDatabaseHash";
         const string SearchUrlsKey = "KeePassHttp_SearchUrls";
+        const string UseKeePassXcSettingsKey = "KeePassNatMsg_UseKpxcSettings";
 
 		public ConfigOpt(AceCustomConfig config)
         {
@@ -92,11 +93,17 @@ namespace KeePassNatMsg
 
         public string OverrideKeePassXcVersion
         {
-            get => _config.GetString(OverrideKeePassXcVersionKey);
-            set => _config.SetString(OverrideKeePassXcVersionKey, value);
+            get
+            {
+                return _config.GetString(OverrideKeePassXcVersionKey);
+            }
+            set
+            {
+                _config.SetString(OverrideKeePassXcVersionKey, value);
+            }
         }
 
-		public string ConnectionDatabaseHash
+        public string ConnectionDatabaseHash
 		{
 			get { return _config.GetString(ConnectionDatabaseHashKey, string.Empty); }
 			set { _config.SetString(ConnectionDatabaseHashKey, value); }
@@ -104,8 +111,26 @@ namespace KeePassNatMsg
 
         public bool SearchUrls
         {
-            get => _config.GetBool(SearchUrlsKey, false);
-            set => _config.SetBool(SearchUrlsKey, value);
+            get
+            {
+                return _config.GetBool(SearchUrlsKey, false);
+            }
+            set
+            {
+                _config.SetBool(SearchUrlsKey, value);
+            }
         }
-	}
+
+        public bool UseKeePassXcSettings
+        {
+            get
+            {
+                return _config.GetBool(UseKeePassXcSettingsKey, false);
+            }
+            set
+            {
+                _config.SetBool(UseKeePassXcSettingsKey, value);
+            }
+        }
+    }
 }

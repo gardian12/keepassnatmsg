@@ -39,6 +39,7 @@ namespace KeePassNatMsg.Protocol
                 {Actions.LOCK_DATABASE, LockDatabase},
                 {Actions.GET_DATABASE_GROUPS, GetDatabaseGroups},
                 {Actions.CREATE_NEW_GROUP, CreateNewGroup},
+                {Actions.GET_TOTP, GetTotp},
             };
         }
 
@@ -71,7 +72,10 @@ namespace KeePassNatMsg.Protocol
             }
         }
 
-        private RequestHandler GetHandler(string action) => _handlers.ContainsKey(action) ? _handlers[action] : null;
+        private RequestHandler GetHandler(string action)
+        {
+            return _handlers.ContainsKey(action) ? _handlers[action] : null;
+        }
 
         private Response GetDatabaseHash(Request req)
         {
@@ -84,28 +88,26 @@ namespace KeePassNatMsg.Protocol
 
         private Response TestAssociate(Request req)
         {
-            var entry = _ext.GetConfigEntry(false);
-            if (entry != null)
+            if (req.TryDecrypt())
             {
-                if (req.TryDecrypt())
-                {
-                    var msg = req.Message;
-                    var x = entry.Strings.FirstOrDefault(e => e.Key.Equals(KeePassNatMsgExt.AssociateKeyPrefix + msg.GetString("id")));
-                    var key = x.Value;
-                    var reqKey = msg.GetBytes("key");
-                    var id = msg.GetString("id");
-                    var dbKey = Convert.FromBase64String(key.ReadString());
-                    if (dbKey.SequenceEqual(reqKey) && !string.IsNullOrWhiteSpace(id))
-                    {
-                        var resp = req.GetResponse();
-                        resp.Message.Add("id", id);
-                        return resp;
-                    }
+                var db = _ext.GetConnectionDatabase();
+                var msg = req.Message;
+                var customKey = KeePassNatMsgExt.DbKey + msg.GetString("id");
+                if (!db.CustomData.Exists(customKey))
                     return new ErrorResponse(req, ErrorType.AssociationFailed);
+                var key = db.CustomData.Get(customKey);
+                var reqKey = msg.GetBytes("key");
+                var id = msg.GetString("id");
+                var dbKey = Convert.FromBase64String(key);
+                if (dbKey.SequenceEqual(reqKey) && !string.IsNullOrWhiteSpace(id))
+                {
+                    var resp = req.GetResponse();
+                    resp.Message.Add("id", id);
+                    return resp;
                 }
-                return new ErrorResponse(req, ErrorType.CannotDecryptMessage);
+                return new ErrorResponse(req, ErrorType.AssociationFailed);
             }
-            return new ErrorResponse(req, ErrorType.AssociationFailed);
+            return new ErrorResponse(req, ErrorType.CannotDecryptMessage);
         }
 
         private Response Associate(Request req)
@@ -267,6 +269,26 @@ namespace KeePassNatMsg.Protocol
 
             resp.Message.Add("name", group.Name);
             resp.Message.Add("uuid", group.Uuid.ToHexString());
+
+            return resp;
+        }
+
+        private Response GetTotp(Request req)
+        {
+            if (!req.TryDecrypt())
+                return new ErrorResponse(req, ErrorType.CannotDecryptMessage);
+
+            var uuid = req.Message.GetString("uuid");
+
+            var es = new EntrySearch();
+            var totp = es.GetTotp(uuid);
+
+            if (string.IsNullOrEmpty(totp))
+                return new ErrorResponse(req, ErrorType.NoLoginsFound);
+
+            var resp = req.GetResponse();
+
+            resp.Message.Add("totp", totp);
 
             return resp;
         }
