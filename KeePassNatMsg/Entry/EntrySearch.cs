@@ -42,10 +42,12 @@ namespace KeePassNatMsg.Entry
 
             Uri hostUri;
             Uri submitUri = null;
+            var uris = new List<Uri>();
 
             if (!string.IsNullOrEmpty(url))
             {
                 hostUri = new Uri(url);
+                uris.Add(hostUri);
             }
             else
             {
@@ -55,6 +57,16 @@ namespace KeePassNatMsg.Entry
             if (!string.IsNullOrEmpty(submitUrl))
             {
                 submitUri = new Uri(submitUrl);
+                // Exclude if "submitUrl" is Javascript (or anything else)
+                if (_allowedSchemes.Contains(submitUri.Scheme) && submitUri.Authority != null)
+                {
+                    uris.Add(submitUri);
+                }
+                else
+                {
+                    submitUrl = null;
+                    submitUri = null;
+                }
             }
 
             var resp = req.GetResponse();
@@ -63,14 +75,29 @@ namespace KeePassNatMsg.Entry
             var items = FindMatchingEntries(url, null);
             if (items.ToList().Count > 0)
             {
+                var configOpt = new ConfigOpt(_host.CustomConfig);
+
                 var filter = new GFunc<PwEntry, bool>((PwEntry e) =>
                 {
                     var c = _ext.GetEntryConfig(e);
 
-                    return c == null || (!c.Allow.Contains(hostUri.Authority)) || (submitUri != null && submitUri.Authority != null && !c.Allow.Contains(submitUri.Authority));
+                    if (configOpt.UseLegacyHostMatching)
+                    {
+                        var fields = new[] {PwDefs.TitleField, PwDefs.UrlField};
+                        var entryUrls = e.Strings
+                            .Where(s => fields.Contains(s.Key) && s.Value != null && !s.Value.IsEmpty)
+                            .Select(s => s.Value.ReadString())
+                            .ToList();
+
+                        var isAllowed = c != null && uris.Select(u => u.Host).Any(u => c.Allow.Contains(u));
+                        var hostMatch = uris.Select(u => u.Host).Any(u => entryUrls.Contains(u));
+
+                        return (c == null && !hostMatch) || (c != null && !hostMatch && !isAllowed);
+                    }
+
+                    return c == null || (!c.Allow.Contains(hostUri.Authority)) || (submitUri != null && !c.Allow.Contains(submitUri.Authority));
                 });
 
-                var configOpt = new ConfigOpt(_host.CustomConfig);
                 var needPrompting = items.Where(e => filter(e.entry)).ToList();
 
                 if (needPrompting.Count > 0 && !configOpt.AlwaysAllowAccess)
@@ -95,7 +122,7 @@ namespace KeePassNatMsg.Entry
                                     var c = _ext.GetEntryConfig(e.entry) ?? new EntryConfig();
                                     var set = f.Allowed ? c.Allow : c.Deny;
                                     set.Add(hostUri.Authority);
-                                    if (submitUri != null && submitUri.Authority != null && submitUri.Authority != hostUri.Authority)
+                                    if (submitUri != null && submitUri.Authority != hostUri.Authority)
                                         set.Add(submitUri.Authority);
                                     _ext.SetEntryConfig(e.entry, c);
                                 }
@@ -258,7 +285,7 @@ namespace KeePassNatMsg.Entry
 
             var configOpt = new ConfigOpt(_host.CustomConfig);
 
-            if (configOpt.SearchInAllOpenedDatabases)
+            if (configOpt.AllowSearchDatabase == (ulong)AllowSearchDatabase.SearchInAllOpenedDatabases)
             {
                 foreach (var doc in _host.MainWindow.DocumentManager.Documents)
                 {
@@ -269,6 +296,12 @@ namespace KeePassNatMsg.Entry
                             return new PwEntryDatabase(entry, doc.Database);
                     }
                 }
+            }
+            else if (configOpt.AllowSearchDatabase == (ulong)AllowSearchDatabase.RestrictSearchInSpecificDatabase)
+            {
+                var entry = _ext.GetSearchDatabase().RootGroup.FindEntry(id, true);
+                if (entry != null)
+                    return new PwEntryDatabase(entry, _ext.GetSearchDatabase());
             }
             else
             {
@@ -369,11 +402,12 @@ namespace KeePassNatMsg.Entry
             var formHost = hostUri.Host;
             var searchHost = hostUri.Host;
             var origSearchHost = hostUri.Host;
+            var searchScheme = hostUri.Scheme;
 
             List<PwDatabase> listDatabases = new List<PwDatabase>();
 
             var configOpt = new ConfigOpt(_host.CustomConfig);
-            if (configOpt.SearchInAllOpenedDatabases)
+            if (configOpt.AllowSearchDatabase == (ulong)AllowSearchDatabase.SearchInAllOpenedDatabases)
             {
                 foreach (PwDocument doc in _host.MainWindow.DocumentManager.Documents)
                 {
@@ -382,6 +416,10 @@ namespace KeePassNatMsg.Entry
                         listDatabases.Add(doc.Database);
                     }
                 }
+            }
+            else if (configOpt.AllowSearchDatabase == (ulong)AllowSearchDatabase.RestrictSearchInSpecificDatabase)
+            {
+                listDatabases.Add(_ext.GetSearchDatabase());
             }
             else
             {
@@ -398,7 +436,14 @@ namespace KeePassNatMsg.Entry
                 //get all possible entries for given host-name
                 while (listResult.Count == listCount && (origSearchHost == searchHost || searchHost.IndexOf(".") != -1))
                 {
-                    parms.SearchString = string.Format("^{0}$|/{0}/?", searchHost);
+                    if (configOpt.MatchSchemes)
+                    {
+                        parms.SearchString = string.Format("^{0}$|{1}://{0}/?", searchHost, searchScheme);
+                    }
+                    else
+                    {
+                        parms.SearchString = string.Format("^{0}$|/{0}/?", searchHost);
+                    }
                     var listEntries = new PwObjectList<PwEntry>();
                     db.RootGroup.SearchEntries(parms, listEntries);
                     listResult.AddRange(listEntries.Select(x => new PwEntryDatabase(x, db)));
@@ -453,32 +498,7 @@ namespace KeePassNatMsg.Entry
                 return formHost.Contains(title) || (!string.IsNullOrEmpty(entryUrl) && formHost.Contains(entryUrl));
             });
 
-            var filterSchemes = new GFunc<PwEntry, bool>((PwEntry e) =>
-            {
-                var title = e.Strings.ReadSafe(PwDefs.TitleField);
-                var entryUrl = e.Strings.ReadSafe(PwDefs.UrlField);
-                Uri entryUri;
-                Uri titleUri;
-
-                if (entryUrl != null && Uri.TryCreate(entryUrl, UriKind.Absolute, out entryUri) && entryUri.Scheme == hostUri.Scheme)
-                {
-                    return true;
-                }
-
-                if (Uri.TryCreate(title, UriKind.Absolute, out titleUri) && titleUri.Scheme == hostUri.Scheme)
-                {
-                    return true;
-                }
-
-                return false;
-            });
-
             var result = listResult.Where(e => filter(e.entry));
-
-            if (configOpt.MatchSchemes)
-            {
-                result = result.Where(e => filterSchemes(e.entry));
-            }
 
             if (configOpt.HideExpired)
             {

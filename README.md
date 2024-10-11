@@ -1,5 +1,9 @@
 [![Main workflow](https://github.com/smorks/keepassnatmsg/actions/workflows/workflow.yml/badge.svg)](https://github.com/smorks/keepassnatmsg/actions/workflows/workflow.yml)
 
+# *** KeePassNatMsg is in maintenance only mode ***
+
+I don't personally use this plugin anymore, therefore it is currently in maintenance mode, which means I will fix critical bugs, and will still accept PR's. I'm also open to passing this project on to a new maintainer, see the [relevant discussion topic](https://github.com/smorks/keepassnatmsg/discussions/104).
+
 # KeePassNatMsg
 
 is a plugin for KeePass 2.x and provides a secure means of exposing KeePass credentials to a browser via [Native Messaging](https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Native_messaging).
@@ -95,8 +99,10 @@ The options dialog will appear:
 
 10. KeePassNatMsg no longer asks for permissions to retrieve entries, it always allows access.
 11. KeePassNatMsg no longer asks for permission to update an entry, it always allows updating them.
-12. Searching for entries is no longer restricted to the current active database in KeePass but is extended to all opened databases!
-  - __Important:__ Even if another database is not connected with the inquirer, KeePassNatMsg will search and retrieve entries of all opened databases if the active one is connected to KeePassNatMsg!
+12. Choice of databases used for searches:
+  - Use only the active database (default).
+  - Use all open databases.
+  - Always use a specific database.
 13. When activated, it will search all string fields beginning with "URL".
 14. if activated KeePassNatMsg also search for string fields which are defined in the found entries and start with "KPH: " (note the space after colon). __The string fields will be transferred to the client in alphabetical order__. You can set string fields in the tab _Advanced_ of an entry.
 [<img src="https://raw.github.com/smorks/KeePassNatMsg/master/documentation/images/advanced-string-fields.png" alt="advanced tab of an entry" width="300px" />](https://raw.github.com/smorks/KeePassNatMsg/master/documentation/images/advanced-string-fields.png)

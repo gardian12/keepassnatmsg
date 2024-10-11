@@ -1,7 +1,16 @@
 ﻿using KeePass.App.Configuration;
+using System.ComponentModel;
 
 namespace KeePassNatMsg
 {
+    public enum AllowSearchDatabase
+    {
+        [Description("Target database for search")]
+        SearchInOnlySelectedDatabase,
+        SearchInAllOpenedDatabases,
+        RestrictSearchInSpecificDatabase
+    }
+
     public class ConfigOpt
     {
         readonly AceCustomConfig _config;
@@ -10,7 +19,9 @@ namespace KeePassNatMsg
         const string UnlockDatabaseRequestKey = "KeePassHttp_UnlockDatabaseRequest";
         const string AlwaysAllowAccessKey = "KeePassHttp_AlwaysAllowAccess";
         const string AlwaysAllowUpdatesKey = "KeePassHttp_AlwaysAllowUpdates";
-        const string SearchInAllOpenedDatabasesKey = "KeePassHttp_SearchInAllOpenedDatabases";
+        const string SearchInAllOpenedDatabasesKey = "KeePassHttp_SearchInAllOpenedDatabases"; // Only for backward compatibility
+        const string AllowSearchDatabaseKey = "KeePassHttp_AllowSearchDatabase";
+        const string SearchDatabaseHashKey = "KeePassHttp_SearchDatabaseHash";
         const string HideExpiredKey = "KeePassHttp_HideExpired";
         const string MatchSchemesKey = "KeePassHttp_MatchSchemes";
         const string ReturnStringFieldsKey = "KeePassHttp_ReturnStringFields";
@@ -20,6 +31,7 @@ namespace KeePassNatMsg
 		const string ConnectionDatabaseHashKey = "KeePassHttp_ConnectionDatabaseHash";
         const string SearchUrlsKey = "KeePassHttp_SearchUrls";
         const string UseKeePassXcSettingsKey = "KeePassNatMsg_UseKpxcSettings";
+        private const string UseLegacyHostMatchingKey = "KeePassNatMsg_UseLegacyHostMatching";
 
 		public ConfigOpt(AceCustomConfig config)
         {
@@ -56,10 +68,23 @@ namespace KeePassNatMsg
             set { _config.SetBool(AlwaysAllowUpdatesKey, value); }
         }
 
-        public bool SearchInAllOpenedDatabases
+        public bool SearchInAllOpenedDatabases // Only for backward compatibility
         {
             get { return _config.GetBool(SearchInAllOpenedDatabasesKey, false); }
             set { _config.SetBool(SearchInAllOpenedDatabasesKey, value); }
+        }
+
+        public ulong AllowSearchDatabase
+        {
+            get {
+                return _config.GetULong(AllowSearchDatabaseKey, 0); }
+            set { _config.SetULong(AllowSearchDatabaseKey, value); }
+        }
+
+        public string SearchDatabaseHash
+        {
+            get { return _config.GetString(SearchDatabaseHashKey, string.Empty); }
+            set { _config.SetString(SearchDatabaseHashKey, value); }
         }
 
         public bool HideExpired
@@ -131,6 +156,12 @@ namespace KeePassNatMsg
             {
                 _config.SetBool(UseKeePassXcSettingsKey, value);
             }
+        }
+
+        public bool UseLegacyHostMatching
+        {
+            get { return _config.GetBool(UseLegacyHostMatchingKey, false); }
+            set { _config.SetBool(UseLegacyHostMatchingKey, value); }
         }
     }
 }
